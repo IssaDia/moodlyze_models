@@ -1,0 +1,45 @@
+# Import necessary libraries
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.feature_extraction.text import CountVectorizer
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import joblib
+from data_handling.data_loader import load_data_from_mongodb
+from data_handling.data_preprocessor import prepare_data_for_training
+
+# Path to save the trained model
+MODEL_DIR = os.path.join("..", "..", "models")
+MODEL_PATH = os.path.join(MODEL_DIR, "naive_bayes.pkl")
+
+def train_naive_bayes():
+    raw_data = load_data_from_mongodb() 
+    X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(raw_data) 
+
+    # Train the Naive Bayes model
+    model = MultinomialNB()
+    model.fit(X_train, y_train)
+
+    accuracy = model.score(X_test, y_test)
+    print(f"Accuracy du modèle : {accuracy:.4f}")
+
+    y_pred = model.predict(X_test)
+    X_test_original = vectorizer.inverse_transform(X_test.toarray())
+
+    print("\nComparaison des résultats sur quelques exemples de l'ensemble de test :")
+    for i in range(10):
+        print(f"Tweet {i+1}:")
+        print(f"  - Texte : {' '.join(X_test_original[i])}")  # Reconstruire la phrase originale
+        print(f"  - Sentiment réel : {y_test.iloc[i]}")  # Utiliser .iloc pour accéder par position
+        print(f"  - Sentiment prédit : {y_pred[i]}")
+        print()
+
+    # Save the trained model and vectorizer
+    joblib.dump(model, MODEL_PATH)
+    joblib.dump(vectorizer, os.path.join("../models", "vectorizer.pkl"))
+
+    print("Naive Bayes model trained and saved successfully.")
+
+if __name__ == "__main__":
+    train_naive_bayes()

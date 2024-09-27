@@ -1,7 +1,7 @@
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from data_handling.mongodb_loader import load_data_from_mongodb
-from data_handling.preprocessor import prepare_data_for_training
+from models.data_handling.data_loader import load_data_from_mongodb
+from models.data_handling.data_preprocessor import prepare_data_for_training
 
 def train_and_evaluate_model(collection_name, db_name, connection_string):
     df = load_data_from_mongodb(collection_name, db_name, connection_string)
