@@ -1,25 +1,28 @@
-from sklearn.naive_bayes import MultinomialNB
-import os, sys
+from sklearn.linear_model import LogisticRegression
+import os
+import sys
+
+# Ajouter le chemin vers le dossier parent
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import joblib
 from data_handling.data_loader import load_data_from_mongodb
 from data_handling.data_preprocessor import prepare_data_for_training
 
-# Path to save the trained model
+# Chemin pour sauvegarder le modèle entraîné
 MODEL_DIR = os.path.join("..", "savedModels")
-MODEL_PATH = os.path.join(MODEL_DIR, "naive_bayes.pkl")
+MODEL_PATH = os.path.join(MODEL_DIR, "logistic_regression.pkl")
 
-def train_naive_bayes():
+def train_logistic_regression():
     raw_data = load_data_from_mongodb() 
     X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(raw_data) 
 
-    # Train the Naive Bayes model
-    model = MultinomialNB()
+    # Entraîner le modèle de régression logistique
+    model = LogisticRegression(max_iter=1000)  # max_iter pour s'assurer que le modèle converge
     model.fit(X_train, y_train)
 
     accuracy = model.score(X_test, y_test)
-    print(f"Accuracy du modèle : {accuracy:.4f}")
+    print(f"Précision du modèle : {accuracy:.4f}")
 
     y_pred = model.predict(X_test)
     X_test_original = vectorizer.inverse_transform(X_test.toarray())
@@ -32,11 +35,11 @@ def train_naive_bayes():
         print(f"  - Sentiment prédit : {y_pred[i]}")
         print()
 
-    # Save the trained model and vectorizer
+    # Sauvegarder le modèle et le vectoriseur
     joblib.dump(model, MODEL_PATH)
-    joblib.dump(vectorizer, os.path.join("../savedModels", "vectorizer_naive_bayes.pkl"))
+    joblib.dump(vectorizer, os.path.join("../savedModels", "vectorizer_logistic_regression.pkl"))
 
-    print("Naive Bayes model trained and saved successfully.")
+    print("Modèle de régression logistique entraîné et sauvegardé avec succès.")
 
 if __name__ == "__main__":
-    train_naive_bayes()
+    train_logistic_regression()
