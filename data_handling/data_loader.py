@@ -10,6 +10,8 @@ MONGODB_URL = os.getenv('MONGODB_URL')
 DB_NAME = os.getenv('DB_NAME')
 COLLECTION_NAME = os.getenv('COLLECTION_NAME')
 
+print(f"MONGODB_URL: {MONGODB_URL}", f"DB_NAME: {DB_NAME}", f"COLLECTION_NAME: {COLLECTION_NAME}")
+
 def load_data_from_mongodb():
     client = MongoClient(MONGODB_URL)
     db = client[DB_NAME]
