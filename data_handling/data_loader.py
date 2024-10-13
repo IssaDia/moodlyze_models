@@ -10,28 +10,40 @@ MONGODB_URL = os.getenv('MONGODB_URL')
 DB_NAME = os.getenv('DB_NAME')
 COLLECTION_NAME = os.getenv('COLLECTION_NAME')
 
-print(f"MONGODB_URL: {MONGODB_URL}", f"DB_NAME: {DB_NAME}", f"COLLECTION_NAME: {COLLECTION_NAME}")
 
-def load_data_from_mongodb():
+def load_data_from_mongodb(limit=None, batch_size=100):
     client = MongoClient(MONGODB_URL)
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
     
-    # Récupération des données
-    data = list(collection.find())
+    all_data = []
+    total_loaded = 0
     
-    # Vérification du nombre de documents récupérés
-    print(f"Nombre de documents récupérés : {len(data)}")
-    
-    # Si des données sont récupérées, afficher un aperçu
-    if data:
-        df = pd.DataFrame(data)
-        print("Aperçu des données récupérées :")
-        print(df.head())  # Afficher les 5 premières lignes du DataFrame
+    # Appliquer la limite au niveau de la requête initiale si spécifiée
+    query = {}
+    if limit:
+        cursor = collection.find(query).limit(limit)
     else:
-        print("Aucune donnée trouvée dans la collection.")
+        cursor = collection.find(query)
     
-    return pd.DataFrame(data)
+    try:
+        while True:
+            batch = list(cursor.batch_size(batch_size))
+            if not batch:
+                break
+            all_data.extend(batch)
+            total_loaded += len(batch)
+            print(f"Chargé {total_loaded} documents...")
+            
+            if limit and total_loaded >= limit:
+                break
+    finally:
+        client.close()
+    
+    df = pd.DataFrame(all_data)
+    print(f"Nombre total de documents chargés : {len(df)}")
+    return df
+
 
 # Tester la fonction
 if __name__ == "__main__":
