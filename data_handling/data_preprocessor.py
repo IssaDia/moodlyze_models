@@ -10,7 +10,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from nlp.sentiment_analysis import analyze_sentiment
 import pandas as pd
 
-def debug_data(df, text_column='cleaned_text', start_row=200, end_row=210):
+def debug_data(df, text_column='cleaned_text'):
     print(f"\nDébogage de la colonne {text_column}:")
     print(f"Nombre total d'éléments : {len(df)}")
     print(f"Nombre de valeurs non-null : {df[text_column].count()}")
@@ -18,13 +18,6 @@ def debug_data(df, text_column='cleaned_text', start_row=200, end_row=210):
     print(f"Nombre de chaînes vides : {(df[text_column] == '').sum()}")
     print(f"Nombre de chaînes contenant uniquement des espaces : {(df[text_column].str.isspace()).sum()}")
     
-    print(f"\nAffichage des lignes {start_row} à {end_row}:")
-    print(df.iloc[start_row:end_row+1])
-    
-    print("\nValeurs de la colonne 'cleaned_text' pour ces lignes:")
-    for idx, row in df.iloc[start_row:end_row+1].iterrows():
-        print(f"Index {idx}, cleaned_text: '{row[text_column]}'")
-
 def prepare_data_for_training(data, text_column='cleaned_text', target_column='label'):
     # Convertir en DataFrame si ce n'est pas déjà le cas
     df = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data

@@ -12,7 +12,7 @@ MODEL_DIR = os.path.join("..", "models/saved_models/naive_bayes")
 MODEL_PATH = os.path.join(MODEL_DIR, "naive_bayes.pkl")
 
 def train_naive_bayes():
-    raw_data = load_data_from_mongodb() 
+    raw_data = list(load_data_from_mongodb())  # Convertir en liste
     print(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
     X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(raw_data) 
     print(f"Taille de l'ensemble d'entraînement : {X_train.shape[0]}")
@@ -30,12 +30,12 @@ def train_naive_bayes():
     X_test_original = vectorizer.inverse_transform(X_test.toarray())
 
     print("\nComparaison des résultats sur quelques exemples de l'ensemble de test :")
-    for i in range(10):
-        print(f"Tweet {i+1}:")
-        print(f"  - Texte : {' '.join(X_test_original[i])}")  # Reconstruire la phrase originale
-        print(f"  - Sentiment réel : {y_test.iloc[i]}")  # Utiliser .iloc pour accéder par position
-        print(f"  - Sentiment prédit : {y_pred[i]}")
-        print()
+    # for i in range(10):
+    #     print(f"Tweet {i+1}:")
+    #     print(f"  - Texte : {' '.join(X_test_original[i])}")  # Reconstruire la phrase originale
+    #     print(f"  - Sentiment réel : {y_test.iloc[i]}")  # Utiliser .iloc pour accéder par position
+    #     print(f"  - Sentiment prédit : {y_pred[i]}")
+    #     print()
 
     # Save the trained model and vectorizer
     joblib.dump(model, MODEL_PATH)
