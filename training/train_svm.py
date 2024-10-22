@@ -1,24 +1,22 @@
-from sklearn.svm import SVC
 import os
 import sys
-
-# Ajouter le chemin vers le dossier parent
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
+from sklearn.svm import SVC
 import joblib
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
 from data_handling.data_preprocessor import prepare_data_for_training
 
-# Chemin pour sauvegarder le modèle entraîné
-MODEL_DIR = os.path.join("..", "savedModels")
-MODEL_PATH = os.path.join(MODEL_DIR, "svm_model.pkl")
+
+MODEL_DIR = os.path.join("..", "models/saved_models/svm")
+MODEL_PATH = os.path.join(MODEL_DIR, "svm.pkl")
+
 
 def train_svm():
     raw_data = load_data_from_mongodb() 
     X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(raw_data) 
 
     # Entraîner le modèle SVM
-    model = SVC(kernel='linear', max_iter=1000)  # Kernel linéaire pour commencer
+    model = SVC(kernel='linear', random_state=42)
     model.fit(X_train, y_train)
 
     accuracy = model.score(X_test, y_test)
@@ -37,7 +35,7 @@ def train_svm():
 
     # Sauvegarder le modèle et le vectoriseur
     joblib.dump(model, MODEL_PATH)
-    joblib.dump(vectorizer, os.path.join("../savedModels", "vectorizer_svm.pkl"))
+    joblib.dump(vectorizer, os.path.join("../models/saved_models/svm", "vectorizer_svm.pkl"))
 
     print("Modèle SVM entraîné et sauvegardé avec succès.")
 
