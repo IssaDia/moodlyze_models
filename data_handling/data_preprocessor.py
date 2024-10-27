@@ -1,29 +1,26 @@
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from nlp.sentiment_analysis import analyze_sentiment
-
-def analyzer_function(tokens):
-    return tokens
-
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from nlp.sentiment_analysis import analyze_sentiment
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.preprocessing import LabelEncoder
+from nlp.sentiment_analysis import analyze_sentiment
 
 def debug_data(df, text_column='cleaned_text'):
+    """Fonction de débogage pour afficher des informations sur la colonne spécifiée."""
     print(f"\nDébogage de la colonne {text_column}:")
     print(f"Nombre total d'éléments : {len(df)}")
     print(f"Nombre de valeurs non-null : {df[text_column].count()}")
     print(f"Nombre de valeurs null : {df[text_column].isnull().sum()}")
     print(f"Nombre de chaînes vides : {(df[text_column] == '').sum()}")
     print(f"Nombre de chaînes contenant uniquement des espaces : {(df[text_column].str.isspace()).sum()}")
-    
+
 def prepare_data_for_training(data, text_column='cleaned_text', target_column='label'):
-    # Convertir en DataFrame si ce n'est pas déjà le cas
+    """Prépare les données pour l'entraînement du modèle de classification des sentiments."""
+    
+    if isinstance(data, pd.Series):
+        raise ValueError("Les données passées doivent être un DataFrame, pas une série.")
+    
     df = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data
-    
-    print(f"Nombre initial de documents : {len(df)}")
-    
+
     # Débogage initial
     debug_data(df, text_column)
     
@@ -41,7 +38,7 @@ def prepare_data_for_training(data, text_column='cleaned_text', target_column='l
     df[target_column] = df[text_column].apply(analyze_sentiment)
     
     # Supprimer les lignes où l'analyse de sentiment a échoué (si applicable)
-    df = df.dropna(subset=[target_column])
+    df = df[df[target_column].notnull() & (df[target_column] != '')]
     print(f"Nombre de documents après analyse de sentiment : {len(df)}")
     
     # Vérifier s'il reste suffisamment de données
@@ -53,6 +50,10 @@ def prepare_data_for_training(data, text_column='cleaned_text', target_column='l
     X = vectorizer.fit_transform(df[text_column]) 
     y = df[target_column]
     
+    # Encodage des cibles si nécessaire
+    le = LabelEncoder()
+    y = le.fit_transform(y)
+
     # Séparation des données en ensemble d'entraînement et de test
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
@@ -60,5 +61,3 @@ def prepare_data_for_training(data, text_column='cleaned_text', target_column='l
     print(f"Taille de l'ensemble de test : {X_test.shape[0]}")
     
     return X_train, X_test, y_train, y_test, vectorizer
-
-

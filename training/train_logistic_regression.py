@@ -4,19 +4,30 @@ from sklearn.model_selection import GridSearchCV
 import os
 import sys
 import joblib
+import pandas as pd  # Assurez-vous d'importer pandas si ce n'est pas déjà fait
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
 from data_handling.data_preprocessor import prepare_data_for_training
-
 
 MODEL_DIR = os.path.join("..", "models/saved_models/logistic_regression")
 MODEL_PATH = os.path.join(MODEL_DIR, "logistic_regression.pkl")
 
 def train_logistic_regression():
-    raw_data = list(load_data_from_mongodb()) 
+    
+    raw_data = pd.DataFrame(list(load_data_from_mongodb()))  # Charger les données dans un DataFrame
     print(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
 
-    X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(raw_data)
+    # Vérifiez que les colonnes existent
+    if 'text' not in raw_data or 'sentiment' not in raw_data:
+        print("Erreur : les colonnes 'text' ou 'sentiment' sont manquantes dans les données.")
+        return
+
+    # Extraire X et y à partir des colonnes appropriées
+    X = raw_data['cleaned_text']  # Utilisez 'cleaned_text' si vous avez besoin de prétraitement
+    y = raw_data['sentiment']  # Utilisez la colonne 'sentiment' pour les étiquettes
+
+    # Préparation des données pour l'entraînement
+    X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(X, y)
     
     print(f"Taille de l'ensemble d'entraînement : {X_train.shape[0]}")
     print(f"Taille de l'ensemble de test : {X_test.shape[0]}")
