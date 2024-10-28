@@ -14,7 +14,7 @@ def debug_data(df, text_column='cleaned_text'):
     print(f"Nombre de chaînes contenant uniquement des espaces : {(df[text_column].str.isspace()).sum()}")
 
 def prepare_data_for_training(data, text_column='cleaned_text', target_column='label'):
-    """Prépare les données pour l'entraînement du modèle de classification des sentiments."""
+   
     
     if isinstance(data, pd.Series):
         raise ValueError("Les données passées doivent être un DataFrame, pas une série.")
