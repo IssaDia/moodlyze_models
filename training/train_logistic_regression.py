@@ -1,6 +1,8 @@
 from sklearn.linear_model import LogisticRegression
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
+from sklearn.utils import resample
 import os
 import sys
 import joblib
@@ -8,11 +10,25 @@ import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
-from data_handling.data_preprocessor import prepare_data_for_training
 
 # Chemin pour sauvegarder le modèle
 MODEL_DIR = os.path.join("..", "models/saved_models/logistic_regression")
 MODEL_PATH = os.path.join(MODEL_DIR, "logistic_regression.pkl")
+
+def balance_classes(data, target_column):
+    # Diviser le dataset par classe
+    classes = data[target_column].unique()
+    class_counts = data[target_column].value_counts()
+    min_count = class_counts.min()  # Trouver le nombre d'éléments de la classe minoritaire
+
+    balanced_data = pd.DataFrame()  # DataFrame pour stocker les échantillons équilibrés
+
+    for label in classes:
+        class_subset = data[data[target_column] == label]
+        balanced_subset = resample(class_subset, replace=True, n_samples=min_count, random_state=42)
+        balanced_data = pd.concat([balanced_data, balanced_subset])
+
+    return balanced_data.sample(frac=1, random_state=42) 
 
 def analyze_class_distribution(y, title="Distribution des classes"):
     """Affiche la distribution des classes dans le dataset."""
@@ -29,8 +45,6 @@ def train_logistic_regression():
         # Charger les données
         raw_data = pd.DataFrame(list(load_data_from_mongodb()))
         print(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
-        print("\nAperçu des données brutes :")
-        print(raw_data.head(10))
 
         # Vérifier les colonnes requises
         required_columns = ['cleaned_text', 'sentiment']
@@ -42,9 +56,17 @@ def train_logistic_regression():
         print("\nDistribution initiale des sentiments:")
         analyze_class_distribution(raw_data['sentiment'])
 
-        # Préparation des données
-        X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(
-            raw_data, "cleaned_text", "sentiment"
+        # Équilibrer les classes
+        balanced_data = balance_classes(raw_data, 'sentiment')
+        print("\nDistribution après équilibrage des classes:")
+        analyze_class_distribution(balanced_data['sentiment'])
+
+        X = balanced_data["cleaned_text"]
+        y = balanced_data["sentiment"]
+
+        # Séparer en ensembles d'entraînement et de test avec stratification
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
         )
 
         print(f"\nTaille de l'ensemble d'entraînement : {X_train.shape}")
@@ -56,6 +78,11 @@ def train_logistic_regression():
         
         print("\nDistribution dans l'ensemble de test:")
         analyze_class_distribution(y_test, "Distribution - Test Set")
+
+        # Vectorisation
+        vectorizer = CountVectorizer(ngram_range=(1, 2), stop_words='english')
+        X_train = vectorizer.fit_transform(X_train)
+        X_test = vectorizer.transform(X_test)
 
         # Entraîner le modèle de régression logistique
         model = LogisticRegression(max_iter=1000, random_state=42)
@@ -69,15 +96,6 @@ def train_logistic_regression():
         y_pred = model.predict(X_test)
         print("\nRapport de classification :")
         print(classification_report(y_test, y_pred))
-
-        # Afficher quelques exemples de prédictions
-        print("\nComparaison des résultats sur quelques exemples de l'ensemble de test :")
-        X_test_original = vectorizer.inverse_transform(X_test)
-        for i in range(min(10, len(X_test_original))):
-            print(f"\nTexte {i+1}:")
-            print(f"  - Contenu : {' '.join(X_test_original[i])}")
-            print(f"  - Sentiment réel : {y_test[i]}")
-            print(f"  - Sentiment prédit : {y_pred[i]}")
 
         # Créer le répertoire si nécessaire et sauvegarder le modèle
         joblib.dump(model, MODEL_PATH)

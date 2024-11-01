@@ -1,5 +1,7 @@
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import classification_report
+from sklearn.utils import resample
 from sklearn.model_selection import train_test_split
 import os
 import sys
@@ -9,11 +11,26 @@ import joblib
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
-from data_handling.data_preprocessor import prepare_data_for_training
+from nlp.sentiment_analysis import analyze_sentiment
 
 # Path to save the trained model
 MODEL_DIR = os.path.join("..", "models/saved_models/naive_bayes")
 MODEL_PATH = os.path.join(MODEL_DIR, "naive_bayes.pkl")
+
+def balance_classes(data, target_column):
+    # Diviser le dataset par classe
+    classes = data[target_column].unique()
+    class_counts = data[target_column].value_counts()
+    min_count = class_counts.min()  # Trouver le nombre d'éléments de la classe minoritaire
+
+    balanced_data = pd.DataFrame()  # DataFrame pour stocker les échantillons équilibrés
+
+    for label in classes:
+        class_subset = data[data[target_column] == label]
+        balanced_subset = resample(class_subset, replace=True, n_samples=min_count, random_state=42)  # changez replace=False à True pour un sur-échantillonnage
+        balanced_data = pd.concat([balanced_data, balanced_subset])
+
+    return balanced_data.sample(frac=1, random_state=42) 
 
 def analyze_class_distribution(y, title="Distribution des classes"):
     """Affiche la distribution des classes dans le dataset."""
@@ -30,10 +47,7 @@ def train_naive_bayes():
         # Charger et convertir les données en DataFrame
         raw_data = pd.DataFrame(list(load_data_from_mongodb()))
         print(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
-        print("\nAperçu des données brutes :")
-        print(raw_data.head(10))
-
-
+    
         # Vérifier les colonnes requises
         required_columns = ['cleaned_text', 'sentiment']
         missing_columns = [col for col in required_columns if col not in raw_data.columns]
@@ -44,9 +58,16 @@ def train_naive_bayes():
         print("\nDistribution initiale des sentiments:")
         analyze_class_distribution(raw_data['sentiment'])
 
-        # Préparation des données
-        X_train, X_test, y_train, y_test, vectorizer = prepare_data_for_training(
-            raw_data, "cleaned_text", "sentiment"
+        balanced_data = balance_classes(raw_data, 'sentiment')
+        print("\nDistribution après équilibrage des classes:")
+        analyze_class_distribution(balanced_data['sentiment'])
+
+        X = balanced_data["cleaned_text"]
+        y = balanced_data["sentiment"]
+
+        # Séparer en ensembles d'entraînement et de test avec stratification
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
         )
 
         print(f"\nTaille de l'ensemble d'entraînement : {X_train.shape}")
@@ -59,8 +80,28 @@ def train_naive_bayes():
         print("\nDistribution dans l'ensemble de test:")
         analyze_class_distribution(y_test, "Distribution - Test Set")
 
+        # Appliquer l'analyse de sentiment
+        try:
+            raw_data["cleaned_text"] = raw_data["sentiment"].apply(analyze_sentiment)
+        except Exception as e:
+            print(f"Erreur lors de l'analyse de sentiment : {e}")
+            return None  # Ou gérer autrement l'erreur
+
+        # Supprimer les lignes où l'analyse de sentiment a échoué (si applicable)
+        raw_data = raw_data[raw_data["cleaned_text"].notnull() & (raw_data["cleaned_text"] != '')]
+        print(f"Nombre de documents après analyse de sentiment : {len(raw_data)}")
+
+        # Vérifier s'il reste suffisamment de données
+        if len(raw_data) < 100:
+            print("Attention : Le nombre de documents restants est très faible.")
+
+        vectorizer = CountVectorizer(ngram_range=(1, 2), stop_words='english')
+
+        X_train = vectorizer.fit_transform(X_train)  
+        X_test = vectorizer.transform(X_test)  
+
         # Entraîner le modèle Naive Bayes
-        model = MultinomialNB(alpha=1.0)  # alpha=1.0 is Laplace smoothing
+        model = MultinomialNB(alpha=1.0) 
         model.fit(X_train, y_train)
 
         # Évaluation du modèle
@@ -72,14 +113,7 @@ def train_naive_bayes():
         print("\nRapport de classification :")
         print(classification_report(y_test, y_pred))
 
-        # Afficher quelques exemples de prédictions
-        print("\nComparaison des résultats sur quelques exemples de l'ensemble de test :")
-        X_test_original = vectorizer.inverse_transform(X_test)
-        for i in range(min(10, len(X_test_original))):
-            print(f"\nTexte {i+1}:")
-            print(f"  - Contenu : {' '.join(X_test_original[i])}")
-            print(f"  - Sentiment réel : {y_test[i]}")
-            print(f"  - Sentiment prédit : {y_pred[i]}")
+        print(f"Valeurs prédites uniques : {np.unique(y_pred)}")
 
         # Créer le répertoire si nécessaire et sauvegarder le modèle
         joblib.dump(model, MODEL_PATH)
