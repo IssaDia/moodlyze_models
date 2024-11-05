@@ -5,9 +5,11 @@ import os
 import sys
 import pandas as pd
 import torch
-import joblib
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
-from transformers import TextClassificationPipeline
+from sklearn.preprocessing import LabelEncoder
+from torch.utils.data import Dataset
+
+
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
@@ -40,6 +42,17 @@ def analyze_class_distribution(y, title="Distribution des classes"):
         percentage = (count / total) * 100
         print(f"{label}: {count} ({percentage:.2f}%)")
 
+class SentimentDataset(Dataset):
+    def __init__(self, encodings):
+        self.encodings = encodings
+
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        return item
+
+    def __len__(self):
+        return len(self.encodings["input_ids"])
+
 def train_bert_classifier():
     try:
         raw_data = pd.DataFrame(list(load_data_from_mongodb()))
@@ -70,9 +83,17 @@ def train_bert_classifier():
         train_encodings = tokenizer(X_train, truncation=True, padding=True, max_length=128)
         test_encodings = tokenizer(X_test, truncation=True, padding=True, max_length=128)
 
-        train_labels = torch.tensor(y_train)
-        test_labels = torch.tensor(y_test)
+        le = LabelEncoder()
+        y_train = le.fit_transform(y_train)
+        y_test = le.transform(y_test)
 
+        train_encodings["labels"] = torch.tensor(y_train)
+        test_encodings["labels"] = torch.tensor(y_test)
+
+        train_dataset = SentimentDataset(train_encodings)
+        test_dataset = SentimentDataset(test_encodings)
+
+      
         training_args = TrainingArguments(
             output_dir=MODEL_DIR,
             num_train_epochs=3,
@@ -85,8 +106,8 @@ def train_bert_classifier():
         trainer = Trainer(
             model=model,
             args=training_args,
-            train_dataset=train_encodings,
-            eval_dataset=test_encodings,
+            train_dataset=train_dataset,
+            eval_dataset=test_dataset,
         )
 
         trainer.train()
