@@ -113,9 +113,9 @@ def train_bert_classifier():
         trainer.train()
 
         # Evaluation
-        y_pred = trainer.predict(test_encodings)
+        y_pred = trainer.predict(test_dataset)
         print("\nRapport de classification :")
-        print(classification_report(y_test, y_pred.argmax(axis=-1)))
+        # print(classification_report(y_test, y_pred.argmax(axis=-1)))
 
         # Sauvegarder le modèle et le tokenizer
         model.save_pretrained(MODEL_PATH)
