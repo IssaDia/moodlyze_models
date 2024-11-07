@@ -9,6 +9,9 @@ from transformers import BertTokenizer, BertForSequenceClassification, Trainer, 
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 
+import ssl
+print(ssl.OPENSSL_VERSION)
+
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
