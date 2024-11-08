@@ -20,7 +20,7 @@ from nlp.sentiment_analysis import analyze_sentiment
 
 # Chemin pour sauvegarder le modèle
 MODEL_DIR = os.path.join("..", "models/saved_models/bert")
-MODEL_PATH = os.path.join(MODEL_DIR, "bert_model")
+MODEL_PATH = os.path.join(MODEL_DIR, "bert")
 
 def balance_classes(data, target_column):
     classes = data[target_column].unique()
