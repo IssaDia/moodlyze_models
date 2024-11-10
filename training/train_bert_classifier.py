@@ -9,6 +9,7 @@ import torch
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
+import shutil
 
 # Add parent directory to system path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -28,21 +29,32 @@ class SentimentDataset(Dataset):
 def setup_model_paths():
     """Configure and verify model save paths"""
     # Get absolute path to project root
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent.parent
+    current_dir = Path(os.getcwd())
     
     # Setup paths
-    model_dir = project_root / "models" / "saved_models" / "bert"
+    model_dir = current_dir /  "models" / "saved_models" / "bert"
     model_path = model_dir / "model"
     
-    # Ensure directories exist
-    os.makedirs(model_dir, exist_ok=True)
-    os.makedirs(model_path, exist_ok=True)
+    # Create directories with explicit permissions
+    os.makedirs(model_dir, mode=0o755, exist_ok=True)
+    os.makedirs(model_path, mode=0o755, exist_ok=True)
     
     return model_dir, model_path
 
 def verify_save_directory(directory):
-    """Verify write permissions in save directory"""
+    """Verify write permissions in save directory with detailed checks"""
+    directory = Path(directory)
+    
+    # Check if directory exists and is writable
+    if not directory.exists():
+        print(f"Directory does not exist: {directory}")
+        return False
+        
+    if not os.access(directory, os.W_OK):
+        print(f"No write permission for directory: {directory}")
+        return False
+    
+    # Test file creation and deletion
     test_file = directory / "write_test.txt"
     try:
         test_file.write_text("test")
@@ -50,42 +62,42 @@ def verify_save_directory(directory):
         return True
     except Exception as e:
         print(f"Directory verification failed: {str(e)}")
+        print(f"Current permissions: {oct(os.stat(directory).st_mode)[-3:]}")
+        print(f"Current owner: {os.stat(directory).st_uid}")
         return False
 
-def save_model_with_verification(model, tokenizer, save_path):
-    """Save model and tokenizer with verification"""
+def save_model_with_torch(model, tokenizer, save_path):
+    """Save model and tokenizer using torch.save"""
     save_path = Path(save_path)
     print(f"\nAttempting to save model to: {save_path}")
 
     try:
-        # Create directory if it doesn't exist
+        # Create directory if needed
         save_path.mkdir(parents=True, exist_ok=True)
         
         # Save model
         print("Saving model...")
-        model.save_pretrained(str(save_path))
+        model_save_path = save_path / "model_state.pt"
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'config': model.config,
+        }, str(model_save_path))
         
-        # Verify model files
-        model_file = save_path / "pytorch_model.bin"
-        if not model_file.exists():
-            raise FileNotFoundError(f"Model file not saved correctly at {model_file}")
-            
+        # Verify model save
+        if not model_save_path.exists():
+            raise FileNotFoundError(f"Model file not saved correctly at {model_save_path}")
+        
         # Save tokenizer
         print("Saving tokenizer...")
-        tokenizer.save_pretrained(str(save_path))
+        tokenizer_save_path = save_path / "tokenizer"
+        tokenizer.save_pretrained(str(tokenizer_save_path))
         
-        # Verify tokenizer files
-        tokenizer_file = save_path / "tokenizer.json"
-        if not tokenizer_file.exists():
-            raise FileNotFoundError(f"Tokenizer file not saved correctly at {tokenizer_file}")
-            
-        print("\nModel and tokenizer saved successfully!")
-        
-        # List saved files
         print("\nSaved files:")
-        for file in save_path.iterdir():
-            print(f"- {file.name}")
-            
+        for file in save_path.rglob("*"):
+            if file.is_file():
+                size = file.stat().st_size
+                print(f"- {file.relative_to(save_path)} ({size/1024:.2f} KB)")
+        
         return True
         
     except Exception as e:
@@ -93,6 +105,33 @@ def save_model_with_verification(model, tokenizer, save_path):
         print(f"Attempted save path: {save_path}")
         print(f"Current working directory: {os.getcwd()}")
         return False
+
+def load_model_with_torch(model_path, num_labels=3):
+    """Load saved model and tokenizer"""
+    model_path = Path(model_path)
+    
+    try:
+        # Load model
+        print("Loading model...")
+        model = BertForSequenceClassification.from_pretrained(
+            "bert-base-uncased",
+            num_labels=num_labels,
+            output_attentions=False,
+            output_hidden_states=False
+        )
+        
+        checkpoint = torch.load(str(model_path / "model_state.pt"))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # Load tokenizer
+        print("Loading tokenizer...")
+        tokenizer = BertTokenizer.from_pretrained(str(model_path / "tokenizer"))
+        
+        return model, tokenizer
+        
+    except Exception as e:
+        print(f"Error during loading: {str(e)}")
+        raise
 
 def balance_classes(data, target_column):
     """Balance class distribution in the dataset"""
@@ -108,7 +147,7 @@ def balance_classes(data, target_column):
 
     return balanced_data.sample(frac=1, random_state=42)
 
-def analyze_class_distribution(y, title="Distribution des classes"):
+def analyze_class_distribution(y, title="Class Distribution"):
     """Analyze and print class distribution"""
     distribution = pd.Series(y).value_counts()
     total = len(y)
@@ -132,21 +171,21 @@ def train_bert_classifier():
 
         # Load and prepare data
         raw_data = pd.DataFrame(list(load_data_from_mongodb()))
-        print(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
+        print(f"Number of elements in raw_data: {len(raw_data)}")
 
         # Verify required columns
         required_columns = ['cleaned_text', 'sentiment']
         missing_columns = [col for col in required_columns if col not in raw_data.columns]
         if missing_columns:
-            raise ValueError(f"Colonnes manquantes : {', '.join(missing_columns)}")
+            raise ValueError(f"Missing columns: {', '.join(missing_columns)}")
 
         # Analyze class distribution
-        print("\nDistribution initiale des sentiments:")
+        print("\nInitial sentiment distribution:")
         analyze_class_distribution(raw_data['sentiment'])
 
         # Balance classes
         balanced_data = balance_classes(raw_data, 'sentiment')
-        print("\nDistribution après équilibrage des classes:")
+        print("\nDistribution after class balancing:")
         analyze_class_distribution(balanced_data['sentiment'])
 
         # Prepare features and labels
@@ -167,6 +206,17 @@ def train_bert_classifier():
             output_attentions=False,
             output_hidden_states=False
         )
+
+        # Test save functionality
+        print("\nTesting save functionality...")
+        test_save = save_model_with_torch(model, tokenizer, model_path)
+        if test_save:
+            print("Save test successful")
+            # Test loading
+            loaded_model, loaded_tokenizer = load_model_with_torch(model_path)
+            print("Load test successful")
+        else:
+            raise RuntimeError("Initial save test failed")
 
         # Prepare datasets
         train_encodings = tokenizer(X_train, truncation=True, padding=True, max_length=128)
@@ -215,12 +265,12 @@ def train_bert_classifier():
         predictions = trainer.predict(test_dataset)
         y_pred = predictions.predictions.argmax(-1)
         
-        print("\nRapport de classification :")
+        print("\nClassification Report:")
         print(classification_report(y_test, y_pred))
 
-        # Save model
-        print("\nSaving model...")
-        if not save_model_with_verification(model, tokenizer, model_path):
+        # Save final model
+        print("\nSaving final model...")
+        if not save_model_with_torch(model, tokenizer, model_path):
             raise RuntimeError("Failed to save model and tokenizer")
 
         print(f"\nTraining completed and model saved successfully at: {model_path}")
