@@ -9,12 +9,10 @@ import torch
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
-import shutil
 
 # Add parent directory to system path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
-from nlp.sentiment_analysis import analyze_sentiment
 
 class SentimentDataset(Dataset):
     def __init__(self, encodings):
