@@ -30,8 +30,11 @@ def setup_model_paths():
     current_dir = Path(os.getcwd())
     
     # Setup paths
-    model_dir = current_dir /  "models" / "saved_models" / "bert"
+    project_root = current_dir.parent
+    model_dir = project_root / "models" / "saved_models" / "bert"
     model_path = model_dir / "model"
+
+    print(model_dir)
     
     # Create directories with explicit permissions
     os.makedirs(model_dir, mode=0o755, exist_ok=True)
