@@ -1,3 +1,4 @@
 venv
 .DS_Store
 models/saved_modelsmodels/saved_models/bert/model_state.pt
+models/saved_models/bert/model_state.pt
