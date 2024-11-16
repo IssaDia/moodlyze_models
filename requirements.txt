@@ -5,3 +5,5 @@ joblib
 python-dotenv
 numpy
 textblob
+nlpaug
+

@@ -42,7 +42,7 @@ class SentimentAnalyzer:
                 
                 # Load tokenizer
                 self.tokenizer = BertTokenizer.from_pretrained(
-                    str(model_path / "tokenizer")
+                   str(model_path.parent / "tokenizer")
                 )
                 
             except Exception as e:
