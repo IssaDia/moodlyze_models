@@ -1,0 +1,11 @@
+2024-11-18 08:24:05,089 - INFO - Début de l'entraînement du modèle...
+2024-11-18 08:24:05,089 - INFO - Chargement des données depuis MongoDB
+2024-11-18 08:24:06,356 - INFO - 
+Distribution initiale:
+2024-11-18 08:24:06,356 - INFO - ==================================================
+2024-11-18 08:24:06,356 - INFO - negative: 813 (33.33%)
+2024-11-18 08:24:06,356 - INFO - neutral: 813 (33.33%)
+2024-11-18 08:24:06,356 - INFO - positive: 813 (33.33%)
+2024-11-18 08:24:06,359 - INFO - Début de la recherche par grille...
+2024-11-18 08:24:08,912 - ERROR - Erreur lors de l'entraînement: A task has failed to un-serialize. Please ensure that the arguments of the function are all picklable.
+2024-11-18 08:24:08,912 - ERROR - Erreur dans le programme principal: A task has failed to un-serialize. Please ensure that the arguments of the function are all picklable.

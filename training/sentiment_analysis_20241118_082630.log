@@ -1,0 +1,8 @@
+2024-11-18 08:26:30,989 - INFO - 
+Distribution initiale:
+2024-11-18 08:26:30,989 - INFO - ==================================================
+2024-11-18 08:26:30,989 - INFO - -1: 2 (40.00%)
+2024-11-18 08:26:30,989 - INFO - 0: 1 (20.00%)
+2024-11-18 08:26:30,989 - INFO - 1: 2 (40.00%)
+2024-11-18 08:26:30,989 - ERROR - Erreur lors de l'entraînement: The least populated class in y has only 1 member, which is too few. The minimum number of groups for any class cannot be less than 2.
+2024-11-18 08:26:30,989 - ERROR - Erreur dans le programme principal: The least populated class in y has only 1 member, which is too few. The minimum number of groups for any class cannot be less than 2.
