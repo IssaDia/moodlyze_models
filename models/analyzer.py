@@ -1,18 +1,22 @@
 from transformers import BertTokenizer, BertForSequenceClassification
 import torch
 from pathlib import Path
-from enum import Enum
+from gensim.models import KeyedVectors  # Use KeyedVectors instead of Word2Vec
 import torch.nn.functional as F
 from typing import Dict, Any
 from .config import ModelType, get_model_config
 from utils.exceptions import ModelLoadError
 import joblib
+import numpy as np
 
 class SentimentAnalyzer:
     def __init__(self, model_type: ModelType):
         self.model_type = model_type
         self.model = None
         self.tokenizer = None
+        self.word_vectors = None  # Changed from word2vec_model
+        self.vectorizer = None
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.load_model()
 
@@ -24,7 +28,6 @@ class SentimentAnalyzer:
             try:
                 model_path = Path(config.model_path)
                 
-                # Load model
                 checkpoint = torch.load(
                     str(model_path), 
                     map_location=self.device
@@ -40,15 +43,29 @@ class SentimentAnalyzer:
                 self.model.to(self.device)
                 self.model.eval()
                 
-                # Load tokenizer
                 self.tokenizer = BertTokenizer.from_pretrained(
                    str(model_path.parent / "tokenizer")
                 )
                 
             except Exception as e:
                 raise ModelLoadError(f"Error loading BERT model: {str(e)}")
+                
+        elif self.model_type == ModelType.WORD2VEC:
+            try:
+                # Load word vectors using KeyedVectors
+                self.word_vectors = KeyedVectors.load(config.model_path)
+                
+                # Load the classifier model separately
+                classifier_path = Path(config.model_path).parent / "classifier.joblib"
+                if classifier_path.exists():
+                    self.model = joblib.load(classifier_path)
+                else:
+                    raise ModelLoadError("Classifier model not found")
+                    
+            except Exception as e:
+                raise ModelLoadError(f"Error loading Word2Vec model: {str(e)}")
+            
         else:
-            # Handle other model types (Naive Bayes, etc.)
             try:
                 self.model = joblib.load(config.model_path)
                 self.vectorizer = joblib.load(config.vectorizer_path)
@@ -64,7 +81,6 @@ class SentimentAnalyzer:
                 raise ModelLoadError("BERT model or tokenizer not loaded")
             
             try:
-                # Tokenize input
                 inputs = self.tokenizer(
                     text,
                     truncation=True,
@@ -73,23 +89,52 @@ class SentimentAnalyzer:
                     return_tensors="pt"
                 )
                 
-                # Move inputs to device
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 
-                # Get prediction
                 with torch.no_grad():
                     outputs = self.model(**inputs)
                     probabilities = F.softmax(outputs.logits, dim=1)
                     prediction = torch.argmax(probabilities, dim=1).item()
                 
-                # Map prediction to sentiment
                 sentiment_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
                 return sentiment_map[prediction]
                 
             except Exception as e:
                 raise ValueError(f"Error predicting with BERT: {str(e)}")
+        
+        elif self.model_type == ModelType.WORD2VEC:
+            if self.word_vectors is None or self.model is None:
+                raise ModelLoadError("Word2Vec vectors or classifier not loaded")
+            
+            try:
+                # Preprocess text into words
+                words = text.lower().split()
+                
+                # Get vectors for words that exist in the vocabulary
+                vectors = [self.word_vectors[word] 
+                          for word in words 
+                          if word in self.word_vectors]
+                
+                if not vectors:
+                    return "Neutral"  # Default when no known words are found
+                
+                # Create document embedding by averaging word vectors
+                text_vector = np.mean(vectors, axis=0).reshape(1, -1)
+                
+                # Predict using the classifier
+                prediction = self.model.predict(text_vector)[0]
+                
+                # Map prediction to sentiment
+                sentiment_map = {
+                    0: "Negative",
+                    1: "Neutral",
+                    2: "Positive"
+                }
+                return sentiment_map.get(prediction, "Neutral")
+                
+            except Exception as e:
+                raise ValueError(f"Error predicting with Word2Vec: {str(e)}")
         else:
-            # Original logic for other models
             if self.vectorizer is None:
                 raise ModelLoadError("Vectorizer not loaded")
             
@@ -97,7 +142,6 @@ class SentimentAnalyzer:
             try:
                 prediction = self.model.predict(vectorized_text)[0]
                 
-                # Map prediction to sentiment
                 if prediction == "negative":
                     return 'Negative'
                 elif prediction == "neutral":
@@ -122,6 +166,11 @@ class SentimentAnalyzer:
                 "max_sequence_length": 128,
                 "num_labels": 3,
                 "device": str(self.device)
+            })
+        elif self.model_type == ModelType.WORD2VEC:
+            info.update({
+                "model_architecture": "Word2Vec",
+                "vocab_size": len(self.word_vectors) if self.word_vectors else 0
             })
         else:
             info.update({

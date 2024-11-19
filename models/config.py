@@ -6,6 +6,7 @@ class ModelType(Enum):
     NAIVE_BAYES = "naive_bayes"
     LOGISTIC_REGRESSION = "logistic_regression"
     BERT = "bert"
+    WORD2VEC= "word2vec"
 
 @dataclass
 class ModelConfig:
@@ -31,6 +32,11 @@ def get_model_config(model_type: ModelType) -> ModelConfig:
             name="Bert",
             model_path=os.path.join(base_path, "bert", "model_state.pt"),
             vectorizer_path=os.path.join(base_path, "bert", "tokenizer")
+        ),
+          ModelType.WORD2VEC: ModelConfig(
+            name="Word2Vec",
+            model_path=os.path.join(base_path, "word2vec", "word2vec.pkl"),
+            vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.pkl")
         ),
     }
     return configs[model_type]
