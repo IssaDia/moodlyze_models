@@ -1,121 +1,101 @@
-import logging
+import numpy as np
+import pandas as pd
+from gensim.models import Word2Vec, KeyedVectors
 from sklearn.linear_model import LogisticRegression
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
-from sklearn.utils import resample
+from sklearn.metrics import classification_report
+import joblib
 import os
 import sys
-import joblib
-import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
 
-# Configuration du logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Chemins pour sauvegarder le modèle et le vectorizer
-MODEL_DIR = os.path.join("..", "models", "saved_models", "word2vec")
-MODEL_PATH = os.path.join(MODEL_DIR, "word2vec.pkl")
-VECTORIZER_PATH = os.path.join(MODEL_DIR, "vectorizer_word2vec.pkl")
+# Charger ou entraîner un modèle Word2Vec
+def train_word2vec(sentences, vector_size=100, window=5, min_count=1):
+    print("Entraînement de Word2Vec...")
+    model = Word2Vec(sentences, vector_size=vector_size, window=window, min_count=min_count, workers=4)
+    return model
 
-def balance_classes(data, target_column):
-    """Équilibre les classes du DataFrame."""
-    classes = data[target_column].unique()
-    min_count = data[target_column].value_counts().min()
+# Moyenne des vecteurs Word2Vec pour chaque phrase
+def vectorize_sentences(sentences, w2v_model):
+    print("Vectorisation des phrases...")
+    vectorized = []
+    for sentence in sentences:
+        words = sentence.split()
+        word_vectors = [w2v_model.wv[word] for word in words if word in w2v_model.wv]
+        if len(word_vectors) > 0:
+            vectorized.append(np.mean(word_vectors, axis=0))
+        else:
+            # Si aucun mot n'a de vecteur, on retourne un vecteur nul
+            vectorized.append(np.zeros(w2v_model.vector_size))
+    return np.array(vectorized)
 
-    balanced_data = pd.DataFrame()
-    for label in classes:
-        class_subset = data[data[target_column] == label]
-        balanced_subset = resample(class_subset, replace=True, n_samples=min_count, random_state=42)
-        balanced_data = pd.concat([balanced_data, balanced_subset])
+# Entraîner un modèle Logistic Regression
+def train_logistic_regression(X, y):
+    print("Entraînement du modèle Logistic Regression...")
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X, y)
+    return model
 
-    return balanced_data.sample(frac=1, random_state=42)
+# Pipeline complet pour Word2Vec + Logistic Regression
+def train_and_save_model(data, text_column, label_column, w2v_path, model_path, vectorizer_path):
+    # Préparation des données
+    print("Chargement des données...")
+    sentences = data[text_column].tolist()
+    labels = data[label_column].tolist()
+    X_train_texts, X_test_texts, y_train, y_test = train_test_split(
+        sentences, labels, test_size=0.1, random_state=42, stratify=labels
+    )
 
-def analyze_class_distribution(y, title="Distribution des classes"):
-    """Affiche la distribution des classes dans le dataset."""
-    distribution = pd.Series(y).value_counts()
-    total = len(y)
-    logging.info(f"\n{title}:")
-    logging.info("=" * 50)
-    for label, count in distribution.items():
-        percentage = (count / total) * 100
-        logging.info(f"{label}: {count} ({percentage:.2f}%)")
+    # Entraîner ou charger un modèle Word2Vec
+    if os.path.exists(w2v_path):
+        print(f"Chargement du modèle Word2Vec depuis {w2v_path}...")
+        w2v_model = KeyedVectors.load(w2v_path)
+    else:
+        w2v_model = train_word2vec([sentence.split() for sentence in X_train_texts])
+        w2v_model.save(w2v_path)
 
-def save_model_and_vectorizer(model, vectorizer):
-    """Sauvegarde le modèle et le vectorizer."""
-    try:
-        os.makedirs(MODEL_DIR, exist_ok=True)
+    # Vectoriser les phrases
+    X_train = vectorize_sentences(X_train_texts, w2v_model)
+    X_test = vectorize_sentences(X_test_texts, w2v_model)
 
-        # Sauvegarder le modèle
-        logging.info(f"Sauvegarde du modèle dans : {MODEL_PATH}")
-        joblib.dump(model, MODEL_PATH)
+    # Entraîner le modèle Logistic Regression
+    lr_model = train_logistic_regression(X_train, y_train)
 
-        # Sauvegarder le vectorizer
-        logging.info(f"Sauvegarde du vectorizer dans : {VECTORIZER_PATH}")
-        joblib.dump(vectorizer, VECTORIZER_PATH)
+    # Évaluer le modèle
+    print("Évaluation du modèle...")
+    y_pred = lr_model.predict(X_test)
+    print(classification_report(y_test, y_pred))
 
-        logging.info("Sauvegarde du modèle et du vectorizer terminée avec succès.")
+    # Sauvegarder le modèle et le vectorizer
+    print(f"Sauvegarde du modèle dans {model_path}...")
+    joblib.dump(lr_model, model_path)
 
-    except Exception as e:
-        logging.error(f"Erreur lors de la sauvegarde : {str(e)}")
-        raise
+    print(f"Sauvegarde du Word2Vec dans {vectorizer_path}...")
+    joblib.dump(w2v_model, vectorizer_path)
 
-def train_logistic_regression():
-    try:
-        # Charger les données
-        raw_data = pd.DataFrame(list(load_data_from_mongodb()))
-        logging.info(f"Nombre d'éléments dans raw_data : {len(raw_data)}")
+    print("Modèle et vectorizer sauvegardés avec succès !")
 
-        # Vérifier les colonnes requises
-        required_columns = ['cleaned_text', 'sentiment']
-        missing_columns = [col for col in required_columns if col not in raw_data.columns]
-        if missing_columns:
-            raise ValueError(f"Colonnes manquantes : {', '.join(missing_columns)}")
-
-        # Analyser la distribution initiale
-        analyze_class_distribution(raw_data['sentiment'], "Distribution initiale des sentiments")
-
-        # Équilibrer les classes
-        balanced_data = balance_classes(raw_data, 'sentiment')
-        analyze_class_distribution(balanced_data['sentiment'], "Distribution après équilibrage")
-
-        X = balanced_data["cleaned_text"]
-        y = balanced_data["sentiment"]
-
-        # Séparer en ensembles d'entraînement et de test
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-
-        # Vectorisation
-        vectorizer = CountVectorizer(ngram_range=(1, 2), stop_words='english')
-        X_train_vect = vectorizer.fit_transform(X_train)
-        X_test_vect = vectorizer.transform(X_test)
-
-        # Entraîner le modèle
-        model = LogisticRegression(max_iter=1000, random_state=42)
-        model.fit(X_train_vect, y_train)
-
-        # Évaluer le modèle
-        accuracy = model.score(X_test_vect, y_test)
-        logging.info(f"Précision du modèle : {accuracy:.4f}")
-
-        # Afficher le rapport de classification
-        y_pred = model.predict(X_test_vect)
-        logging.info("\nRapport de classification :")
-        logging.info(classification_report(y_test, y_pred))
-
-        # Sauvegarder le modèle et le vectorizer
-        save_model_and_vectorizer(model, vectorizer)
-
-        logging.info("Modèle de régression logistique entraîné et sauvegardé avec succès.")
-        return model, vectorizer
-
-    except Exception as e:
-        logging.error(f"Erreur lors de l'entraînement : {str(e)}")
-        raise
-
+# Exemple d'utilisation
 if __name__ == "__main__":
-    train_logistic_regression()
+    # Charger les données
+    data = pd.DataFrame(list(load_data_from_mongodb()))
+
+    # Chemins pour sauvegarder le modèle et le vectorizer
+    base_dir = "models/saved_models/word2vec_logistic"
+    os.makedirs(base_dir, exist_ok=True)
+    w2v_path = os.path.join(base_dir, "word2vec.kv")
+    model_path = os.path.join(base_dir, "logistic_regression.pkl")
+    vectorizer_path = os.path.join(base_dir, "word2vec_vectorizer.pkl")
+
+    # Entraîner et sauvegarder le modèle
+    train_and_save_model(
+        data,
+        text_column="cleaned_text",
+        label_column="sentiment",
+        w2v_path=w2v_path,
+        model_path=model_path,
+        vectorizer_path=vectorizer_path
+    )
