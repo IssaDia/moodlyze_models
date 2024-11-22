@@ -11,8 +11,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
 
-project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-save_dir = os.path.join(project_dir, "models", "word2vec")
+BASE_SAVE_DIR = "/Users/issa/Desktop/moodlyze/models/models/saved_models/word2vec"
+os.makedirs(BASE_SAVE_DIR, exist_ok=True)
 
 
 # Charger ou entraîner un modèle Word2Vec
@@ -87,11 +87,9 @@ if __name__ == "__main__":
     data = pd.DataFrame(list(load_data_from_mongodb()))
 
     # Chemins pour sauvegarder le modèle et le vectorizer
-    base_dir = "../../saved_models/word2ec"
-    os.makedirs(base_dir, exist_ok=True)
-    w2v_path = os.path.join(base_dir, "word2vec.kv")
-    model_path = os.path.join(base_dir, "word2vec.pkl")
-    vectorizer_path = os.path.join(base_dir, "word2vec_vectorizer.pkl")
+    w2v_path = os.path.join(BASE_SAVE_DIR, "word2vec.kv")
+    model_path = os.path.join(BASE_SAVE_DIR, "word2vec.pkl")
+    vectorizer_path = os.path.join(BASE_SAVE_DIR, "word2vec_vectorizer.pkl")
 
     # Entraîner et sauvegarder le modèle
     train_and_save_model(
@@ -99,6 +97,6 @@ if __name__ == "__main__":
         text_column="cleaned_text",
         label_column="sentiment",
         w2v_path=w2v_path,
-        model_path=save_dir,
-        vectorizer_path=save_dir
+        model_path=model_path,
+        vectorizer_path=vectorizer_path
     )
