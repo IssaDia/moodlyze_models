@@ -53,12 +53,13 @@ class SentimentAnalyzer:
         elif self.model_type == ModelType.WORD2VEC:
             try:
                 # Load word vectors using KeyedVectors
-                self.word_vectors = KeyedVectors.load(config.model_path)
+                self.word_vectors = KeyedVectors.load(config.model_path.replace(".pkl", ".kv"))
+                self.model = joblib.load(config.model_path)
+
                 
                 # Load the classifier model separately
-                classifier_path = Path(config.model_path).parent / "classifier.joblib"
-                if classifier_path.exists():
-                    self.model = joblib.load(classifier_path)
+                if Path(config.vectorizer_path).exists():
+                    self.vectorizer = joblib.load(config.vectorizer_path)
                 else:
                     raise ModelLoadError("Classifier model not found")
                     
@@ -111,25 +112,23 @@ class SentimentAnalyzer:
                 words = text.lower().split()
                 
                 # Get vectors for words that exist in the vocabulary
-                vectors = [self.word_vectors[word] 
-                          for word in words 
-                          if word in self.word_vectors]
+                vectors = [self.word_vectors[word] for word in words if word in self.word_vectors]
+
                 
                 if not vectors:
                     return "Neutral"  # Default when no known words are found
                 
                 # Create document embedding by averaging word vectors
                 text_vector = np.mean(vectors, axis=0).reshape(1, -1)
+
+                if self.vectorizer:
+                    text_vector = self.vectorizer.transform([text_vector])
                 
                 # Predict using the classifier
                 prediction = self.model.predict(text_vector)[0]
                 
                 # Map prediction to sentiment
-                sentiment_map = {
-                    0: "Negative",
-                    1: "Neutral",
-                    2: "Positive"
-                }
+                sentiment_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
                 return sentiment_map.get(prediction, "Neutral")
                 
             except Exception as e:
