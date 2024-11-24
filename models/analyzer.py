@@ -104,33 +104,34 @@ class SentimentAnalyzer:
                 raise ValueError(f"Error predicting with BERT: {str(e)}")
         
         elif self.model_type == ModelType.WORD2VEC:
-            if self.word_vectors is None or self.model is None:
-                raise ModelLoadError("Word2Vec vectors or classifier not loaded")
+            if self.vectorizer is None:
+                raise ModelLoadError("Word2Vec model not loaded")
             
             try:
-                # Preprocess text into words
-                words = text.lower().split()
+                # Transform the text into word vectors
+                words = text.split()  # Découpage en mots
+                word_vectors = [
+                    self.vectorizer.wv[word] for word in words if word in self.vectorizer.wv
+                ]
                 
-                # Get vectors for words that exist in the vocabulary
-                vectors = [self.word_vectors[word] for word in words if word in self.word_vectors]
-
+                if not word_vectors:
+                    raise ValueError("No words from the text were found in Word2Vec vocabulary")
                 
-                if not vectors:
-                    return "Neutral"  # Default when no known words are found
+                # Compute the average of the word vectors to represent the sentence
+                sentence_vector = np.mean(word_vectors, axis=0).reshape(1, -1)
                 
-                # Create document embedding by averaging word vectors
-                text_vector = np.mean(vectors, axis=0).reshape(1, -1)
-
-                if self.vectorizer:
-                    text_vector = self.vectorizer.transform([text_vector])
-                
-                # Predict using the classifier
-                prediction = self.model.predict(text_vector)[0]
+                # Predict using the classification model
+                prediction = self.model.predict(sentence_vector)[0]
                 
                 # Map prediction to sentiment
-                sentiment_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
-                return sentiment_map.get(prediction, "Neutral")
-                
+                if prediction == "negative":
+                    return "Negative"
+                elif prediction == "neutral":
+                    return "Neutral"
+                elif prediction == "positive":
+                    return "Positive"
+                else:
+                    raise ValueError("Unexpected prediction value")
             except Exception as e:
                 raise ValueError(f"Error predicting with Word2Vec: {str(e)}")
         else:
