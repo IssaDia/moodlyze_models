@@ -1,102 +1,179 @@
 import numpy as np
 import pandas as pd
-from gensim.models import Word2Vec, KeyedVectors
+from gensim.models import Word2Vec
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
+from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import RandomOverSampler
 import joblib
 import os
 import sys
+from collections import Counter
+import random
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_handling.data_loader import load_data_from_mongodb
 
+# Répertoire de sauvegarde des modèles
 BASE_SAVE_DIR = "/Users/issa/Desktop/moodlyze/models/models/saved_models/word2vec"
 os.makedirs(BASE_SAVE_DIR, exist_ok=True)
 
 
-# Charger ou entraîner un modèle Word2Vec
-def train_word2vec(sentences, vector_size=100, window=5, min_count=1):
+def train_word2vec(sentences, vector_size=200, window=7, min_count=2, epochs=20):
+    """Entraîne le modèle Word2Vec avec des paramètres optimisés."""
     print("Entraînement de Word2Vec...")
-    model = Word2Vec(sentences, vector_size=vector_size, window=window, min_count=min_count, workers=4)
+    model = Word2Vec(
+        sentences=sentences,
+        vector_size=vector_size,
+        window=window,
+        min_count=min_count,
+        workers=4,
+        sg=1,
+        epochs=epochs,
+    )
     return model
 
-# Moyenne des vecteurs Word2Vec pour chaque phrase
+
 def vectorize_sentences(sentences, w2v_model):
+    """Vectorise les phrases en utilisant Word2Vec avec gestion des mots hors vocabulaire."""
     print("Vectorisation des phrases...")
     vectorized = []
+
     for sentence in sentences:
         words = sentence.split()
-        word_vectors = [w2v_model.wv[word] for word in words if word in w2v_model.wv]
-        if len(word_vectors) > 0:
-            vectorized.append(np.mean(word_vectors, axis=0))
+        word_vectors = []
+        word_counts = Counter(words)
+
+        for word in words:
+            if word in w2v_model.wv:
+                tf = word_counts[word] / len(words)
+                word_vectors.append(w2v_model.wv[word] * tf)
+
+        if word_vectors:
+            sentence_vector = np.mean(word_vectors, axis=0)
         else:
-            # Si aucun mot n'a de vecteur, on retourne un vecteur nul
-            vectorized.append(np.zeros(w2v_model.vector_size))
+            sentence_vector = np.zeros(w2v_model.vector_size)
+        vectorized.append(sentence_vector)
+
     return np.array(vectorized)
 
-# Entraîner un modèle Logistic Regression
-def train_logistic_regression(X, y):
-    print("Entraînement du modèle Logistic Regression...")
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X, y)
-    return model
 
-# Pipeline complet pour Word2Vec + Logistic Regression
-def train_and_save_model(data, text_column, label_column, w2v_path, model_path, vectorizer_path):
-    # Préparation des données
-    print("Chargement des données...")
+def train_logistic_regression(X, y):
+    """Entraîne le modèle de régression logistique avec des paramètres optimisés."""
+    print("Entraînement du modèle Logistic Regression...")
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    model = LogisticRegression(
+        C=0.1,
+        max_iter=5000,
+        multi_class="multinomial",
+        class_weight="balanced",
+        solver="lbfgs",
+        random_state=42,
+    )
+    model.fit(X_scaled, y)
+    return model, scaler
+
+
+def augment_sentence(sentence, num_augmented=1):
+    """Augmente une phrase en réorganisant les mots ou en ajoutant du bruit."""
+    augmented_sentences = []
+    for _ in range(num_augmented):
+        words = sentence.split()
+        random.shuffle(words)  # Mélange des mots
+        augmented_sentences.append(" ".join(words))
+    return augmented_sentences
+
+
+def balance_and_augment_data(data, text_column, label_column, min_samples=1000):
+    """Équilibre et augmente les données pour améliorer les performances."""
+    print("Équilibrage et augmentation des données...")
+    ros = RandomOverSampler(random_state=42)
+    X = data[text_column].tolist()
+    y = data[label_column].tolist()
+
+    # Vérification de la taille du dataset
+    class_counts = pd.Series(y).value_counts()
+    print(f"Nombre d'exemples par classe avant l'augmentation: {class_counts.to_dict()}")
+    
+    if len(data) < min_samples:
+        print(f"Dataset trop petit (moins de {min_samples} échantillons). Augmentation nécessaire.")
+    else:
+        print(f"Dataset suffisant (plus de {min_samples} échantillons).")
+
+    # Rééquilibrage des classes
+    X_resampled, y_resampled = ros.fit_resample(pd.DataFrame(X), pd.Series(y))
+    
+    # Augmentation des phrases
+    augmented_sentences = X_resampled.iloc[:, 0].apply(lambda sentence: augment_sentence(sentence, num_augmented=1)).explode().tolist()
+
+    # Création des données équilibrées et augmentées
+    balanced_data = pd.DataFrame(
+        {
+            text_column: X_resampled.iloc[:, 0].tolist() + augmented_sentences,
+            label_column: y_resampled.tolist() + y_resampled.tolist(),
+        }
+    )
+    
+    return balanced_data
+
+
+def train_and_save_model(data, text_column, label_column, base_dir):
+    """Pipeline complet d'entraînement avec des améliorations."""
+    print("Préparation des données...")
     sentences = data[text_column].tolist()
     labels = data[label_column].tolist()
+
+    word2vec_dir = os.path.join(base_dir, "word2vec")
+    os.makedirs(word2vec_dir, exist_ok=True)
+
+    vectorizer_path = os.path.join(word2vec_dir, "vectorizer_word2vec.pkl")
+    model_path = os.path.join(word2vec_dir, "word2vec.pkl")
+    scaler_path = os.path.join(word2vec_dir, "scaler.pkl")
+
     X_train_texts, X_test_texts, y_train, y_test = train_test_split(
-        sentences, labels, test_size=0.1, random_state=42, stratify=labels
+        sentences, labels, test_size=0.2, random_state=42, stratify=labels
     )
 
-    # Entraîner ou charger un modèle Word2Vec
-    if os.path.exists(w2v_path):
-        print(f"Chargement du modèle Word2Vec depuis {w2v_path}...")
-        w2v_model = KeyedVectors.load(w2v_path)
-    else:
-        w2v_model = train_word2vec([sentence.split() for sentence in X_train_texts])
-        w2v_model.save(w2v_path)
+    print("Entraînement du modèle Word2Vec...")
+    tokenized_sentences = [text.split() for text in X_train_texts]
+    w2v_model = train_word2vec(tokenized_sentences)
 
-    # Vectoriser les phrases
+    print("Vectorisation des données...")
     X_train = vectorize_sentences(X_train_texts, w2v_model)
     X_test = vectorize_sentences(X_test_texts, w2v_model)
 
-    # Entraîner le modèle Logistic Regression
-    lr_model = train_logistic_regression(X_train, y_train)
+    lr_model, scaler = train_logistic_regression(X_train, y_train)
 
-    # Évaluer le modèle
-    print("Évaluation du modèle...")
-    y_pred = lr_model.predict(X_test)
+    X_test_scaled = scaler.transform(X_test)
+    y_pred = lr_model.predict(X_test_scaled)
+    print("\nÉvaluation du modèle:")
     print(classification_report(y_test, y_pred))
 
-    # Sauvegarder le modèle et le vectorizer
-    print(f"Sauvegarde du modèle dans {model_path}...")
-    joblib.dump(lr_model, model_path)
-
-    print(f"Sauvegarde du Word2Vec dans {vectorizer_path}...")
+    print(f"Sauvegarde des modèles dans {word2vec_dir}...")
     joblib.dump(w2v_model, vectorizer_path)
+    joblib.dump(lr_model, model_path)
+    joblib.dump(scaler, scaler_path)
 
-    print("Modèle et vectorizer sauvegardés avec succès !")
+    print("Modèles sauvegardés avec succès!")
+    return w2v_model, lr_model, scaler
 
-# Exemple d'utilisation
+
 if __name__ == "__main__":
-    # Charger les données
+    print("Chargement des données depuis MongoDB...")
     data = pd.DataFrame(list(load_data_from_mongodb()))
 
-    # Chemins pour sauvegarder le modèle et le vectorizer
-    w2v_path = os.path.join(BASE_SAVE_DIR, "word2vec.kv")
-    model_path = os.path.join(BASE_SAVE_DIR, "word2vec.pkl")
-    vectorizer_path = os.path.join(BASE_SAVE_DIR, "word2vec_vectorizer.pkl")
+    balanced_data = balance_and_augment_data(
+        data, text_column="cleaned_text", label_column="sentiment"
+    )
 
-    # Entraîner et sauvegarder le modèle
-    train_and_save_model(
-        data,
+    base_dir = "/Users/issa/Desktop/moodlyze/models/models/saved_models"
+
+    w2v_model, lr_model, scaler = train_and_save_model(
+        balanced_data,
         text_column="cleaned_text",
         label_column="sentiment",
-        w2v_path=w2v_path,
-        model_path=model_path,
-        vectorizer_path=vectorizer_path
+        base_dir=base_dir,
     )
