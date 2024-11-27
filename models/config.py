@@ -13,6 +13,7 @@ class ModelConfig:
     name: str
     model_path: str
     vectorizer_path: str
+    scaler_path: str = None
 
 def get_model_config(model_type: ModelType) -> ModelConfig:
     project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,7 +37,8 @@ def get_model_config(model_type: ModelType) -> ModelConfig:
           ModelType.WORD2VEC: ModelConfig(
             name="Word2Vec",
             model_path=os.path.join(base_path, "word2vec", "word2vec.pkl"),
-            vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.pkl")
+            vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.pkl"),
+            scaler_path=os.path.join(base_path, "word2vec", "scaler.pkl")
         ),
     }
     return configs[model_type]

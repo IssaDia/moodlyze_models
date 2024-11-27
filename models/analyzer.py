@@ -14,8 +14,9 @@ class SentimentAnalyzer:
         self.model_type = model_type
         self.model = None
         self.tokenizer = None
-        self.word_vectors = None  # Changed from word2vec_model
+        self.word_vectors = None 
         self.vectorizer = None
+        self.scaler = None
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.load_model()
@@ -51,20 +52,18 @@ class SentimentAnalyzer:
                 raise ModelLoadError(f"Error loading BERT model: {str(e)}")
                 
         elif self.model_type == ModelType.WORD2VEC:
-            try:
-                # Load word vectors using KeyedVectors
-                self.word_vectors = KeyedVectors.load(config.model_path.replace(".pkl", ".kv"))
-                self.model = joblib.load(config.model_path)
-
+                for path in [config.model_path, config.vectorizer_path, config.scaler_path]:
+                    try:
+                        obj = joblib.load(path)
+                        print(f"Fichier {path} chargé avec succès : {type(obj)}")
+                    except Exception as e:
+                        print(f"Erreur lors du chargement de {path}: {str(e)}")
                 
-                # Load the classifier model separately
-                if Path(config.vectorizer_path).exists():
-                    self.vectorizer = joblib.load(config.vectorizer_path)
-                else:
-                    raise ModelLoadError("Classifier model not found")
-                    
-            except Exception as e:
-                raise ModelLoadError(f"Error loading Word2Vec model: {str(e)}")
+                    try:
+                        self.word_vectors = KeyedVectors.load(config.model_path)
+            
+                    except Exception as e:
+                        raise ModelLoadError(f"Error loading Word2Vec model: {str(e)}")
             
         else:
             try:
@@ -77,6 +76,10 @@ class SentimentAnalyzer:
 
     def predict(self, text: str) -> str:
         """Predict sentiment for given text"""
+        from .config import get_model_config
+        config = get_model_config(self.model_type)
+
+
         if self.model_type == ModelType.BERT:
             if self.model is None or self.tokenizer is None:
                 raise ModelLoadError("BERT model or tokenizer not loaded")
@@ -103,37 +106,55 @@ class SentimentAnalyzer:
             except Exception as e:
                 raise ValueError(f"Error predicting with BERT: {str(e)}")
         
-        elif self.model_type == ModelType.WORD2VEC:
-            if self.vectorizer is None:
-                raise ModelLoadError("Word2Vec model not loaded")
+        if self.model_type == ModelType.WORD2VEC:
+            print("=== Debugging Word2Vec Model Loading ===")
+            
+            # Debug model path
+            print(f"Model Path: {config.model_path}")
+            print(f"Model Path Exists: {Path(config.model_path).exists()}")
+            
+            # Debug vectorizer path
+            print(f"Vectorizer Path: {config.vectorizer_path}")
+            print(f"Vectorizer Path Exists: {Path(config.vectorizer_path).exists()}")
+            
+            # Debug scaler path
+            print(f"Scaler Path: {config.scaler_path}")
+            print(f"Scaler Path Exists: {Path(config.scaler_path).exists()}")
             
             try:
-                # Transform the text into word vectors
-                words = text.split()  # Découpage en mots
-                word_vectors = [
-                    self.vectorizer.wv[word] for word in words if word in self.vectorizer.wv
-                ]
+                # Load Word Vectors
+                print("Attempting to load Word Vectors...")
+                self.word_vectors = KeyedVectors.load(config.model_path)
+                print("Word Vectors loaded successfully")
+                print(f"Vocabulary Size: {len(self.word_vectors)}")
                 
-                if not word_vectors:
-                    raise ValueError("No words from the text were found in Word2Vec vocabulary")
-                
-                # Compute the average of the word vectors to represent the sentence
-                sentence_vector = np.mean(word_vectors, axis=0).reshape(1, -1)
-                
-                # Predict using the classification model
-                prediction = self.model.predict(sentence_vector)[0]
-                
-                # Map prediction to sentiment
-                if prediction == "negative":
-                    return "Negative"
-                elif prediction == "neutral":
-                    return "Neutral"
-                elif prediction == "positive":
-                    return "Positive"
+                # Load Vectorizer
+                print("Attempting to load Vectorizer...")
+                if Path(config.vectorizer_path).exists():
+                    self.vectorizer = joblib.load(config.vectorizer_path)
+                    print("Vectorizer loaded successfully")
+                    print(f"Vectorizer Type: {type(self.vectorizer)}")
                 else:
-                    raise ValueError("Unexpected prediction value")
+                    print("ERROR: Vectorizer file not found!")
+                    raise ModelLoadError("Classifier model not found")
+                
+                # Load Scaler
+                print("Attempting to load Scaler...")
+                if Path(config.scaler_path).exists():
+                    self.scaler = joblib.load(config.scaler_path)
+                    print("Scaler loaded successfully")
+                    print(f"Scaler Type: {type(self.scaler)}")
+                else:
+                    print("ERROR: Scaler file not found!")
+                    raise ModelLoadError("Scaler model not found")
+                
             except Exception as e:
-                raise ValueError(f"Error predicting with Word2Vec: {str(e)}")
+                print("=== FULL ERROR DETAILS ===")
+                print(f"Error Type: {type(e)}")
+                print(f"Error Message: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                raise ModelLoadError(f"Detailed Word2Vec model loading error: {str(e)}")
         else:
             if self.vectorizer is None:
                 raise ModelLoadError("Vectorizer not loaded")
