@@ -16,6 +16,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from data_handling.data_loader import load_data_from_mongodb
 
+print(joblib.__version__)
+
+
+
 def train_word2vec(sentences, vector_size=200, window=7, min_count=2, epochs=20):
     """Entraîne le modèle Word2Vec avec des paramètres optimisés."""
     print("Entraînement de Word2Vec...")
@@ -143,7 +147,7 @@ def train_model(balanced_data, text_column, label_column, base_save_dir):
 
     # Sauvegarde des modèles
     w2v_model.save(vectorizer_path)
-    joblib.dump(lr_model, model_path)
+    joblib.dump(lr_model, model_path, compress=0)
     joblib.dump(scaler, scaler_path)
 
     print(f"Modèles sauvegardés dans {model_dir}")
