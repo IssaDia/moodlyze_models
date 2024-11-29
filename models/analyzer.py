@@ -8,6 +8,9 @@ from .config import ModelType, get_model_config
 from utils.exceptions import ModelLoadError
 import joblib
 import numpy as np
+import pickle
+from textblob import TextBlob
+
 
 class SentimentAnalyzer:
     def __init__(self, model_type: ModelType):
@@ -52,18 +55,13 @@ class SentimentAnalyzer:
                 raise ModelLoadError(f"Error loading BERT model: {str(e)}")
                 
         elif self.model_type == ModelType.WORD2VEC:
-                for path in [config.model_path, config.vectorizer_path, config.scaler_path]:
                     try:
-                        obj = joblib.load(path)
-                        print(f"Fichier {path} chargé avec succès : {type(obj)}")
+                        self.model = joblib.load(config.model_path)
+                        print(f"Fichier {config.model_path}")
+                        self.vectorizer = joblib.load(config.vectorizer_path)
+                        self.scaler = joblib.load(config.scaler_path)
                     except Exception as e:
-                        print(f"Erreur lors du chargement de {path}: {str(e)}")
-                
-                    try:
-                        self.word_vectors = KeyedVectors.load(config.model_path)
-            
-                    except Exception as e:
-                        raise ModelLoadError(f"Error loading Word2Vec model: {str(e)}")
+                        print(f"Erreur lors du chargement de {config.model_path}: {str(e)}")
             
         else:
             try:
@@ -107,54 +105,19 @@ class SentimentAnalyzer:
                 raise ValueError(f"Error predicting with BERT: {str(e)}")
         
         if self.model_type == ModelType.WORD2VEC:
-            print("=== Debugging Word2Vec Model Loading ===")
-            
-            # Debug model path
-            print(f"Model Path: {config.model_path}")
-            print(f"Model Path Exists: {Path(config.model_path).exists()}")
-            
-            # Debug vectorizer path
-            print(f"Vectorizer Path: {config.vectorizer_path}")
-            print(f"Vectorizer Path Exists: {Path(config.vectorizer_path).exists()}")
-            
-            # Debug scaler path
-            print(f"Scaler Path: {config.scaler_path}")
-            print(f"Scaler Path Exists: {Path(config.scaler_path).exists()}")
-            
             try:
-                # Load Word Vectors
-                print("Attempting to load Word Vectors...")
-                self.word_vectors = KeyedVectors.load(config.model_path)
-                print("Word Vectors loaded successfully")
-                print(f"Vocabulary Size: {len(self.word_vectors)}")
-                
-                # Load Vectorizer
-                print("Attempting to load Vectorizer...")
-                if Path(config.vectorizer_path).exists():
-                    self.vectorizer = joblib.load(config.vectorizer_path)
-                    print("Vectorizer loaded successfully")
-                    print(f"Vectorizer Type: {type(self.vectorizer)}")
+                blob = TextBlob(text)
+                polarity = blob.sentiment.polarity
+
+                if polarity > 0:
+                    return "Positive"
+                elif polarity < 0:
+                    return "Negative"
                 else:
-                    print("ERROR: Vectorizer file not found!")
-                    raise ModelLoadError("Classifier model not found")
-                
-                # Load Scaler
-                print("Attempting to load Scaler...")
-                if Path(config.scaler_path).exists():
-                    self.scaler = joblib.load(config.scaler_path)
-                    print("Scaler loaded successfully")
-                    print(f"Scaler Type: {type(self.scaler)}")
-                else:
-                    print("ERROR: Scaler file not found!")
-                    raise ModelLoadError("Scaler model not found")
-                
+                    return "Neutral"
             except Exception as e:
-                print("=== FULL ERROR DETAILS ===")
-                print(f"Error Type: {type(e)}")
-                print(f"Error Message: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                raise ModelLoadError(f"Detailed Word2Vec model loading error: {str(e)}")
+                print(f"Sentiment analysis error: {str(e)}")
+                return "Neutral"
         else:
             if self.vectorizer is None:
                 raise ModelLoadError("Vectorizer not loaded")

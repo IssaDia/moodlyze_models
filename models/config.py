@@ -37,7 +37,7 @@ def get_model_config(model_type: ModelType) -> ModelConfig:
           ModelType.WORD2VEC: ModelConfig(
             name="Word2Vec",
             model_path=os.path.join(base_path, "word2vec", "word2vec.pkl"),
-            vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.pkl"),
+            vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.model"),
             scaler_path=os.path.join(base_path, "word2vec", "scaler.pkl")
         ),
     }
