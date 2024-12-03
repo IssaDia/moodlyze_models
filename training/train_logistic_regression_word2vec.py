@@ -9,16 +9,11 @@ from gensim.models import Word2Vec
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 from imblearn.over_sampling import RandomOverSampler
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from data_handling.data_loader import load_data_from_mongodb
-
-print(joblib.__version__)
-
-
 
 def train_word2vec(sentences, vector_size=200, window=7, min_count=2, epochs=20):
     """Entraîne le modèle Word2Vec avec des paramètres optimisés."""
@@ -56,47 +51,34 @@ def vectorize_sentences(sentences, w2v_model):
 
     return np.array(vectorized)
 
-def augment_sentence(sentence, num_augmented=1):
-    """Augmente une phrase en réorganisant les mots."""
-    augmented_sentences = []
-    for _ in range(num_augmented):
-        words = sentence.split()
-        random.shuffle(words)
-        augmented_sentences.append(" ".join(words))
-    return augmented_sentences
-
-def balance_and_augment_data(data, text_column, label_column, min_samples=1000):
-    """Équilibre et augmente les données."""
-    print("Équilibrage et augmentation des données...")
+def balance_and_augment_data(data, text_column, label_column):
+    """Équilibre et augmente les données pour les classes minoritaires."""
+    print("Équilibrage des données...")
     ros = RandomOverSampler(random_state=42)
-    
-    X = data[text_column].tolist()
-    y = data[label_column].tolist()
 
-    # Vérification de la distribution des classes
+    X = data[text_column]
+    y = data[label_column]
+
+    # Vérification de la distribution initiale
     class_counts = pd.Series(y).value_counts()
-    print(f"Nombre d'exemples par classe avant augmentation: {class_counts.to_dict()}")
+    print(f"Distribution initiale : {class_counts.to_dict()}")
 
-    # Rééchantillonnage
+    # Équilibrage avec RandomOverSampler
     X_resampled, y_resampled = ros.fit_resample(pd.DataFrame(X), pd.Series(y))
-    
-    # Augmentation des données
-    augmented_sentences = X_resampled.iloc[:, 0].apply(
-        lambda sentence: augment_sentence(sentence, num_augmented=1)
-    ).explode().tolist()
 
     balanced_data = pd.DataFrame({
-        text_column: X_resampled.iloc[:, 0].tolist() + augmented_sentences,
-        label_column: y_resampled.tolist() + y_resampled.tolist(),
+        text_column: X_resampled.iloc[:, 0],
+        label_column: y_resampled
     })
-    
+
+    # Vérification de la distribution après équilibrage
+    class_counts_balanced = balanced_data[label_column].value_counts()
+    print(f"Distribution après équilibrage : {class_counts_balanced.to_dict()}")
+
     return balanced_data
 
 def train_model(balanced_data, text_column, label_column, base_save_dir):
-    """Pipeline complet d'entraînement du modèle."""
-    # Création du répertoire de sauvegarde
-    os.makedirs(base_save_dir, exist_ok=True)
-    
+    """Pipeline complet d'entraînement avec sauvegarde des modèles."""
     # Préparation des données
     sentences = balanced_data[text_column].tolist()
     labels = balanced_data[label_column].tolist()
@@ -123,7 +105,7 @@ def train_model(balanced_data, text_column, label_column, base_save_dir):
 
     # Entraînement du classificateur
     lr_model = LogisticRegression(
-        C=0.1,
+        C=1.0,
         max_iter=5000,
         multi_class="multinomial",
         class_weight="balanced",
@@ -134,10 +116,12 @@ def train_model(balanced_data, text_column, label_column, base_save_dir):
 
     # Évaluation du modèle
     y_pred = lr_model.predict(X_test_scaled)
-    print("\nÉvaluation du modèle:")
+    print("\nRapport de classification :")
     print(classification_report(y_test, y_pred))
+    print("\nMatrice de confusion :")
+    print(confusion_matrix(y_test, y_pred))
 
-    # Chemins de sauvegarde
+    # Sauvegarde des modèles
     model_dir = os.path.join(base_save_dir, "word2vec")
     os.makedirs(model_dir, exist_ok=True)
 
@@ -145,7 +129,6 @@ def train_model(balanced_data, text_column, label_column, base_save_dir):
     model_path = os.path.join(model_dir, "word2vec.pkl")
     scaler_path = os.path.join(model_dir, "scaler.pkl")
 
-    # Sauvegarde des modèles
     w2v_model.save(vectorizer_path)
     joblib.dump(lr_model, model_path, compress=0)
     joblib.dump(scaler, scaler_path)
@@ -155,7 +138,7 @@ def train_model(balanced_data, text_column, label_column, base_save_dir):
     return w2v_model, lr_model, scaler
 
 def main():
-    # Chemins de sauvegarde
+    # Répertoire de sauvegarde
     BASE_SAVE_DIR = "/Users/issa/Desktop/moodlyze/models/models/saved_models"
     os.makedirs(BASE_SAVE_DIR, exist_ok=True)
 
@@ -171,7 +154,7 @@ def main():
     )
 
     # Entraînement du modèle
-    w2v_model, lr_model, scaler = train_model(
+    train_model(
         balanced_data,
         text_column="cleaned_text",
         label_column="sentiment", 
