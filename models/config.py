@@ -7,6 +7,7 @@ class ModelType(Enum):
     LOGISTIC_REGRESSION = "logistic_regression"
     BERT = "bert"
     WORD2VEC= "word2vec"
+    EMOTION = "emotion_analysis" 
 
 @dataclass
 class ModelConfig:
@@ -39,6 +40,11 @@ def get_model_config(model_type: ModelType) -> ModelConfig:
             model_path=os.path.join(base_path, "word2vec", "word2vec.pkl"),
             vectorizer_path=os.path.join(base_path, "word2vec", "vectorizer_word2vec.model"),
             scaler_path=os.path.join(base_path, "word2vec", "scaler.pkl")
+        ),
+        ModelType.EMOTION: ModelConfig(
+            name="Emotion Analysis",
+            model_path="distilbert-base-uncased", 
+             vectorizer_path="" 
         ),
     }
     return configs[model_type]

@@ -10,6 +10,8 @@ import joblib
 import numpy as np
 import pickle
 from textblob import TextBlob
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
 
 
 class SentimentAnalyzer:
@@ -27,8 +29,14 @@ class SentimentAnalyzer:
     def load_model(self):
         """Load the appropriate model based on model_type"""
         config = get_model_config(self.model_type)
+
+        if self.model_type == ModelType.EMOTION:
+            self.model = AutoModelForSequenceClassification.from_pretrained(config.model_path, num_labels=6)
+            self.tokenizer = AutoTokenizer.from_pretrained(config.model_path)
+            self.model.to(self.device)
+            self.model.eval()
         
-        if self.model_type == ModelType.BERT:
+        elif self.model_type == ModelType.BERT:
             try:
                 model_path = Path(config.model_path)
                 
@@ -77,8 +85,20 @@ class SentimentAnalyzer:
         from .config import get_model_config
         config = get_model_config(self.model_type)
 
+        if self.model_type == ModelType.EMOTION:
+            inputs = self.tokenizer(
+                text, truncation=True, padding=True, max_length=128, return_tensors="pt"
+            ).to(self.device)
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probabilities = F.softmax(outputs.logits, dim=1)
+                prediction = torch.argmax(probabilities, dim=1).item()
 
-        if self.model_type == ModelType.BERT:
+            labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
+            return labels[prediction]
+
+
+        elif self.model_type == ModelType.BERT:
             if self.model is None or self.tokenizer is None:
                 raise ModelLoadError("BERT model or tokenizer not loaded")
             
@@ -143,6 +163,9 @@ class SentimentAnalyzer:
             "model_type": self.model_type.value,
             "model_class": type(self.model).__name__,
         }
+
+        if self.model_type == ModelType.EMOTION:
+            info.update({"architecture": "DistilBERT (Emotion Analysis)", "device": str(self.device)})
         
         if self.model_type == ModelType.BERT:
             info.update({

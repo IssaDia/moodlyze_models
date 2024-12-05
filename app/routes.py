@@ -14,34 +14,20 @@ def index():
 
 @bp.route('/analyze', methods=['POST'])
 def analyze():
-    comment = request.form.get('comment')
+    comment = request.form.get('comment', "")
     if not comment:
         return jsonify({'error': 'Comment is required'}), 400
-    
-    try:
-        sentiment = analyzer.predict(comment)
-        return jsonify({
-            'sentiment': sentiment,
-            'model_type': analyzer.model_type.value
-        })
-        
-    except ModelLoadError as e:
-        return jsonify({'error': f'Failed to load model: {str(e)}'}), 500
-    except Exception as e:
-        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+    sentiment = analyzer.predict(comment)
+    return jsonify({'sentiment': sentiment})
 
 @bp.route('/change_model', methods=['POST'])
 def change_model():
-    model_type = request.form.get('model_type')
-    if model_type is None:
-        return jsonify({'error': 'Model type is required'}), 400
-
+    model_type = request.form.get('model_type', '').lower()
     try:
         new_model_type = ModelType(model_type)
         global analyzer
         analyzer = SentimentAnalyzer(new_model_type)
         return jsonify({'success': True, 'model_type': model_type})
-    except ValueError:
-        return jsonify({'error': 'Invalid model type'}), 400
-    except ModelLoadError as e:
-        return jsonify({'error': f'Failed to load model: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Erreur : {str(e)}'}), 500
+
